@@ -1,0 +1,217 @@
+---
+title: "Assignment_1"
+author: "Jonathan Lee"
+date: "September 13, 2020"
+output: html_document
+---
+
+To get a df of all available variables in the 2018 ACS5 dataset.
+```{r}
+
+# avail_vars <- load_variables(2018, "acs5", cache = TRUE)
+# View(avail_vars)
+
+```
+
+
+
+
+```{r view variable}
+library(tidycensus)
+library(tidyverse)
+library(magrittr)
+library(scales)
+
+vars <- c(tot_hh = "B11009_001",
+          tot_unmarried_hh = "B11009_002",
+          mm_hh = "B11009_003",
+          mf_hh = "B11009_004",
+          ff_hh = "B11009_005",
+          fm_hh = "B11009_006",
+          other_hh = "B11009_007",
+          med_income = "B19013_001",
+          tot_housing = "B25008_001",
+          owned_housing = "B25008_002",
+          rented_housing = "B25008_003",
+          edu_tot = "B06009_001",
+          edu_less_hs = "B06009_002",
+          edu_hs = "B06009_003",
+          edu_some_college = "B06009_004",
+          edu_bach = "B06009_005",
+          edu_grad = "B06009_006")
+
+LA_tracts <- get_acs(geography = "tract",
+                            variables = vars,
+                            year = 2018, state = "CA", 
+                            county = "Los Angeles", 
+                            output = "wide") %>%
+            rename(tot_hh = tot_hhE,
+                   tot_unmarried_hh = tot_unmarried_hhE,
+                   mm_hh = mm_hhE,
+                   mf_hh = mf_hhE,
+                   ff_hh = ff_hhE,
+                   fm_hh = fm_hhE,
+                   other_hh = other_hhE,
+                   med_income = med_incomeE,
+                   tot_housing = tot_housingE,
+                   owned_housing = owned_housingE,
+                   rented_housing = rented_housingE,
+                   edu_tot = edu_totE,
+                   edu_less_hs = edu_less_hsE,
+                   edu_hs = edu_hsE,
+                   edu_some_college = edu_some_collegeE,
+                   edu_bach = edu_bachE,
+                   edu_grad = edu_gradE) %>%
+            mutate(samesex_hh_exist = case_when(
+                                  mm_hh != 0 ~ TRUE,
+                                  ff_hh != 0 ~ TRUE,
+                                  TRUE ~ FALSE),
+                   inc_abo_50 = case_when(
+                     med_income >= 50000 ~ TRUE,
+                     TRUE ~ FALSE),
+                    pct_samesex_hh = (mm_hh+ff_hh)/tot_unmarried_hh,
+                    pct_rented = rented_housing/tot_housing,
+                    pct_edu_less_hs = edu_less_hs/edu_tot)%>%
+            filter(tot_hh > 0, edu_tot >0) %>%
+            select(GEOID, tot_hh, tot_unmarried_hh, mm_hh, mf_hh, ff_hh, fm_hh,
+                   other_hh,samesex_hh_exist, pct_samesex_hh, med_income, 
+                   inc_abo_50, tot_housing, owned_housing, rented_housing, pct_rented,
+                   edu_tot, edu_less_hs, edu_hs, edu_some_college, edu_bach, edu_grad,
+                   pct_edu_less_hs)
+            
+
+LA_county <- get_acs(geography = "county",
+                            variables = vars,
+                            year = 2018, state = "CA", 
+                            county = "Los Angeles", 
+                            output = "wide")%>%
+            rename(tot_hh = tot_hhE,
+                   tot_unmarried_hh = tot_unmarried_hhE,
+                   mm_hh = mm_hhE,
+                   mf_hh = mf_hhE,
+                   ff_hh = ff_hhE,
+                   fm_hh = fm_hhE,
+                   other_hh = other_hhE,
+                   med_income = med_incomeE,
+                   tot_housing = tot_housingE,
+                   owned_housing = owned_housingE,
+                   rented_housing = rented_housingE)
+```
+
+
+```{r}
+ggplot(
+  LA_tracts,
+  aes(x = samesex_hh_exist, y = med_income, fill = samesex_hh_exist)) +
+  
+  geom_violin() +
+  labs(title = "Tracts with unmarried same-sex couples and their median incomes") +
+  ylab("Median income of tract")+
+  xlab(NULL)+
+  scale_x_discrete(labels = c("TRUE" = "With unmarried same-sex couples",
+                              "FALSE" = "Without unmarried same-sex couples"))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()
+```
+
+```{r}
+
+LA_county_pivot_1 <- LA_county %>%
+                    pivot_longer(c( tot_hh, tot_unmarried_hh),
+                           names_to = "total_hh_type", values_to = "count")
+
+ggplot(
+  LA_county_pivot_1,
+  aes(x = total_hh_type, y = count, fill = total_hh_type)) +
+  
+  geom_col() +
+  labs(title = "Total count of households in LA County") +
+  ylab("Count")+
+  xlab(NULL)+
+  scale_x_discrete(labels = c("tot_hhE" = "Total households",
+                              "tot_unmarried_hhE" = "Total households with unmarried couples"))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()
+
+
+```
+```{r}
+
+
+LA_county_pivot_2 <- LA_county %>%
+                    pivot_longer(c( mm_hh,ff_hh, mf_hh, fm_hh),
+                           names_to = "hh_type", values_to = "count")
+
+ggplot(
+  LA_county_pivot_2,
+   aes(x = 1, y = count, fill = factor(hh_type, levels=c("mm_hh", "ff_hh","mf_hh","fm_hh")))) +
+  
+  geom_col(position = "fill") +
+  
+  coord_polar("y", start = 0) +
+  scale_fill_discrete(name = "Household type",
+                      labels = c("Same-sex male", "Same-sex female", "Opp-sex male", "Opp-sex female"))+
+  theme_void()
+
+```
+
+```{r}
+
+filtered_ss_exist <- LA_tracts %>%
+               filter(samesex_hh_exist == TRUE)
+
+ggplot(filtered_ss_exist, aes(pct_samesex_hh, med_income))+
+  geom_point()+
+  theme_minimal()
+
+```
+
+```{r}
+filtered_housing <- LA_tracts %>%
+                      filter(tot_housing > 0)
+
+ggplot(filtered_housing, aes(x = samesex_hh_exist, y = inc_abo_50, fill = (pct_rented))) +
+  geom_tile()
+
+
+```
+```{r}
+
+ggplot(filtered_housing, aes(x = med_income, y = pct_rented,
+                             color = samesex_hh_exist)) +
+  geom_point()+
+  theme_minimal()
+
+
+```
+
+```{r}
+
+edu_pivot <- LA_tracts %>%
+                pivot_longer(c( edu_less_hs, edu_hs, edu_some_college, edu_bach, edu_grad),
+                              names_to = "edu_type", values_to = "edu_count")
+
+View(edu_pivot)
+
+ggplot(edu_pivot, aes(x = edu_type, y = edu_count,
+                             fill = samesex_hh_exist)) +
+  geom_col( position = position_dodge())
+```
+
+```{r}
+
+ggplot(LA_tracts, aes(x = pct_edu_less_hs, y = med_income)) +
+  geom_point()
+
+```
+```{r}
+ggplot(LA_tracts, aes(pct_edu_less_hs))+
+  geom_density() +
+  theme_minimal()
+```
+```{r}
+ggplot(LA_tracts, aes(x = pct_edu_less_hs, fill = samesex_hh_exist))+
+  geom_boxplot() +
+  theme_minimal()
+```
+
