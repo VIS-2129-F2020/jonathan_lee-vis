@@ -1,26 +1,27 @@
 ---
-title: "Assignment_1"
+title: "Assignment 1"
 author: "Jonathan Lee"
-date: "September 13, 2020"
-output: html_document
+date: "September 16, 2020"
+output: 
+  html_document:
+    theme: readable
 ---
 
-To get a df of all available variables in the 2018 ACS5 dataset.
+I used the Wes Anderson color package.
 ```{r}
-
-# avail_vars <- load_variables(2018, "acs5", cache = TRUE)
-# View(avail_vars)
-
+# install.packages("wesanderson")
 ```
 
 
+## Data Gathering and Cleanup. 
+### I mostly used the Los Angeles County tract-level data but also used the aggregated county-level data for a couple figures.
 
-
-```{r view variable}
+```{r, results = 'hide', message = FALSE}
 library(tidycensus)
 library(tidyverse)
 library(magrittr)
 library(scales)
+library(wesanderson)
 
 vars <- c(tot_hh = "B11009_001",
           tot_unmarried_hh = "B11009_002",
@@ -72,7 +73,7 @@ LA_tracts <- get_acs(geography = "tract",
                     pct_samesex_hh = (mm_hh+ff_hh)/tot_unmarried_hh,
                     pct_rented = rented_housing/tot_housing,
                     pct_edu_less_hs = edu_less_hs/edu_tot)%>%
-            filter(tot_hh > 0, edu_tot >0) %>%
+            filter(tot_hh > 0, edu_tot > 0, tot_housing > 0) %>%
             select(GEOID, tot_hh, tot_unmarried_hh, mm_hh, mf_hh, ff_hh, fm_hh,
                    other_hh,samesex_hh_exist, pct_samesex_hh, med_income, 
                    inc_abo_50, tot_housing, owned_housing, rented_housing, pct_rented,
@@ -98,21 +99,8 @@ LA_county <- get_acs(geography = "county",
                    rented_housing = rented_housingE)
 ```
 
-
-```{r}
-ggplot(
-  LA_tracts,
-  aes(x = samesex_hh_exist, y = med_income, fill = samesex_hh_exist)) +
-  
-  geom_violin() +
-  labs(title = "Tracts with unmarried same-sex couples and their median incomes") +
-  ylab("Median income of tract")+
-  xlab(NULL)+
-  scale_x_discrete(labels = c("TRUE" = "With unmarried same-sex couples",
-                              "FALSE" = "Without unmarried same-sex couples"))+
-  scale_y_continuous(labels = comma)+
-  theme_minimal()
-```
+## Plot #1
+### The total number of households in Los Angeles County and the number of households with unmarried couples.
 
 ```{r}
 
@@ -125,19 +113,24 @@ ggplot(
   aes(x = total_hh_type, y = count, fill = total_hh_type)) +
   
   geom_col() +
-  labs(title = "Total count of households in LA County") +
+  labs(title = "Households in LA County") +
   ylab("Count")+
   xlab(NULL)+
-  scale_x_discrete(labels = c("tot_hhE" = "Total households",
-                              "tot_unmarried_hhE" = "Total households with unmarried couples"))+
+  scale_x_discrete(labels = c("tot_hh" = "Total households",
+                              "tot_unmarried_hh" = "Total households with unmarried couples"))+
   scale_y_continuous(labels = comma)+
-  theme_minimal()
+  theme_minimal()+
+  theme(legend.position = 'none')+
+  scale_fill_manual(values = wes_palette("GrandBudapest1"))
 
 
 ```
+
+
+## Plot #2
+### The breakdown of the unmarried couple households into type by genders of the couple.
+
 ```{r}
-
-
 LA_county_pivot_2 <- LA_county %>%
                     pivot_longer(c( mm_hh,ff_hh, mf_hh, fm_hh),
                            names_to = "hh_type", values_to = "count")
@@ -147,71 +140,174 @@ ggplot(
    aes(x = 1, y = count, fill = factor(hh_type, levels=c("mm_hh", "ff_hh","mf_hh","fm_hh")))) +
   
   geom_col(position = "fill") +
+  labs(title = "Unmarried couple households in LA County") +
   
   coord_polar("y", start = 0) +
-  scale_fill_discrete(name = "Household type",
-                      labels = c("Same-sex male", "Same-sex female", "Opp-sex male", "Opp-sex female"))+
+  scale_fill_manual(name = "Household type",
+                      labels = c("Male with male partner", "Female with female partner",
+                                 "Male with female partner", "Female with male partner"),
+                      values = wes_palette("GrandBudapest1"))+
   theme_void()
 
 ```
 
+
+## Plot #3
+### Tracts with reported same-sex unmarried couples and their median income distribution.
+
+
+```{r}
+ggplot(
+  LA_tracts %>% drop_na(med_income),
+  aes(x = samesex_hh_exist, y = med_income, fill = samesex_hh_exist)) +
+  
+  geom_violin() +
+  labs(title = "Tracts with/without unmarried same-sex couples and their median incomes") +
+  ylab("Median income of tract")+
+  xlab(NULL)+
+  scale_x_discrete(labels = c("TRUE" = "With unmarried same-sex couples",
+                              "FALSE" = "Without unmarried same-sex couples"))+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()+
+  theme(legend.position = 'none')+
+  scale_fill_manual(values = wes_palette("GrandBudapest1"))
+```
+
+## Plot #4
+### Scatterplot of the percent of same-sex unmarried couples and the median income of each tract.
+
+
 ```{r}
 
-filtered_ss_exist <- LA_tracts %>%
-               filter(samesex_hh_exist == TRUE)
+filtered_ss_exist <- LA_tracts %>% filter(samesex_hh_exist == TRUE)
 
-ggplot(filtered_ss_exist, aes(pct_samesex_hh, med_income))+
+ggplot(filtered_ss_exist, aes(pct_samesex_hh, med_income, color = ""))+
   geom_point()+
-  theme_minimal()
+  labs(title = "% of same-sex unmarried couples in each tract and its median income", 
+       x = "% of same-sex couples among total unmarried couples",
+       y = "median income")+
+  scale_x_continuous(labels = percent)+
+  scale_y_continuous(labels = comma)+
+  theme_minimal()+
+  theme(legend.position = 'none')+
+  scale_color_manual(values = wes_palette(n=1, "GrandBudapest1"))
 
 ```
 
-```{r}
-filtered_housing <- LA_tracts %>%
-                      filter(tot_housing > 0)
+## Plot #5
+### Heatmap of the percent of renting households in each tract divided into categories of the tract reporting same-sex unmarried couples and the tract median income being over $50,000.
 
-ggplot(filtered_housing, aes(x = samesex_hh_exist, y = inc_abo_50, fill = (pct_rented))) +
-  geom_tile()
+
+```{r}
+
+ggplot(LA_tracts %>% filter (tot_housing > 0), 
+       aes(x = samesex_hh_exist, y = inc_abo_50, fill = (pct_rented))) +
+  geom_tile()+
+  labs(title = "Heatmap of percent of renting households by factors",
+       x = "Same-sex unmarried couples reported in tract",
+       y = "Tract median income is above $50,000")+
+   scale_fill_gradient2(name = "Percent rented", labels = percent)
+  
 
 
 ```
+
+## Plot #6
+### Scatterplot of the median income and % of renting households in each tract.
+
 ```{r}
 
-ggplot(filtered_housing, aes(x = med_income, y = pct_rented,
-                             color = samesex_hh_exist)) +
+ggplot(LA_tracts %>% drop_na(med_income),
+       aes(x = med_income, y = pct_rented, color = samesex_hh_exist)) +
   geom_point()+
-  theme_minimal()
+  labs(title = "Median income in each tract and the % of renting households",
+       x = "Median income",
+       y = "% of renting households")+
+  scale_x_continuous(labels = comma)+
+  scale_y_continuous(labels = percent)+
+  theme_minimal()+
+  scale_color_manual(name = "Same-sex unmarried couples 
+                     reported in tract",
+                     values = wes_palette("GrandBudapest1"))
 
 
 ```
+
+
+## Plot #7
+### Chart of the count of households by education attainment. Divided into whether same-sex unmarried couples were reported in tract.
+
 
 ```{r}
 
 edu_pivot <- LA_tracts %>%
-                pivot_longer(c( edu_less_hs, edu_hs, edu_some_college, edu_bach, edu_grad),
-                              names_to = "edu_type", values_to = "edu_count")
+                pivot_longer(
+                  c( edu_less_hs, edu_hs, edu_some_college, edu_bach, edu_grad),
+                  names_to = "edu_type", values_to = "edu_count")
+edu_pivot$edu_type <- factor(edu_pivot$edu_type, 
+                             levels = c("edu_less_hs", "edu_hs", 
+                                        "edu_some_college", "edu_bach",
+                                        "edu_grad"))
 
-View(edu_pivot)
-
-ggplot(edu_pivot, aes(x = edu_type, y = edu_count,
-                             fill = samesex_hh_exist)) +
-  geom_col( position = position_dodge())
+ggplot(edu_pivot, aes(x = edu_type, y = edu_count, fill = samesex_hh_exist)) +
+  geom_col( position = position_dodge())+
+  labs(title = "Count of eduction type by whether the tract has samesex couples",
+       x = "Education type", y = "Count")+
+  scale_x_discrete(labels = c("edu_bach" = "Bachelor's degree",
+                     "edu_grad" = "Graduate degree or higher",
+                     "edu_hs" = "High school degree or equivalent",
+                     "edu_less_hs" = "Less than High school",
+                     "edu_some_college" = "Some college or Associates"))+
+  scale_y_continuous(labels = comma)+
+  scale_fill_manual(name = "Same-sex unmarried couples reported in tract", 
+                    values = wes_palette("GrandBudapest1"))+
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
 ```
+
+## Plot #8
+### Scatterplot of the % of households with less than a high school degree and the median income of each tract
+
 
 ```{r}
 
-ggplot(LA_tracts, aes(x = pct_edu_less_hs, y = med_income)) +
-  geom_point()
+ggplot(LA_tracts %>% drop_na(med_income), 
+            aes(x = pct_edu_less_hs, y = med_income, color = "")) +
+  geom_point()+
+  labs(title = "Scatterplot of less than a high school degree and median income",
+       x = "% of households in tract with less than a high school degree",
+       y = "median income")+
+  scale_x_continuous(labels = percent)+
+  scale_y_continuous(labels = comma)+
+  theme(legend.position = 'none')+
+  scale_color_manual(values = wes_palette("GrandBudapest1"))
 
 ```
+
+## Plot #9
+### Density plot of the precentages in each tract of households with less than a high school degree.
+
 ```{r}
 ggplot(LA_tracts, aes(pct_edu_less_hs))+
   geom_density() +
+  labs(title = "Density plot of households with less than a high school degree",
+    x = "% of households in each tract with less than a high school degree" )+
+  scale_x_continuous(labels = percent)+
   theme_minimal()
 ```
+
+## Plot #10
+### Boxplot of the precentages in each tract of households with less than a high school degree divided by whether same-sex unmarried couples were reported in the tract.
+
 ```{r}
 ggplot(LA_tracts, aes(x = pct_edu_less_hs, fill = samesex_hh_exist))+
-  geom_boxplot() +
-  theme_minimal()
+  geom_boxplot()+
+  labs(x = "% of households in each tract with less than a high school degree")+
+  scale_x_continuous(labels = percent)+
+  theme_minimal()+
+  theme(axis.text.y = element_blank())+
+  scale_fill_manual(name = "Same-sex unmarried couples 
+                    reported in tract",
+                    values = wes_palette("GrandBudapest1"),
+                    guide = guide_legend(reverse = TRUE))
 ```
 
