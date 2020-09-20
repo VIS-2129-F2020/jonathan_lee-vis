@@ -1,0 +1,177 @@
+---
+title: "Assignment 2"
+author: "Jonathan Lee"
+date: "September 21st, 2020"
+output: 
+  html_document:
+    theme: readable
+---
+
+```{r, results = 'hide', message = FALSE}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(tidyverse)
+library(ggspatial)
+library(cartogram)
+library(ggthemes)
+library(magrittr)
+library(tidycensus)
+library(cartogram)
+
+```
+
+## Baseline Map
+### This is the baseline map of the US and its states using the R naturalearth package. I chose to not show the states Alaska and Hawaii on this map and the following examples.
+
+
+```{r}
+US_states <- ne_states(country = "United States of America",
+                       returnclass = "sf") %>%
+  filter(name != "Alaska",
+         name != "Hawaii")
+
+
+US_map <- ggplot(US_states) +
+  geom_sf() +
+  theme_bw()
+
+US_map
+
+```
+
+## Map Projection #1
+### This map is a projection using NAD83 Albers Equal Area of California.
+
+```{r}
+
+CA_state_plane <- "+proj=aea +lat_1=34 +lat_2=40.5 +lat_0=0 +lon_0=-120 +x_0=0 +y_0=-4000000 +ellps=GRS80 +datum=NAD83 +units=m +no_defs"
+
+US_map <- ggplot(US_states) +
+  geom_sf() +
+  coord_sf(crs = CA_state_plane)+
+  theme_bw()
+
+US_map
+
+
+```
+
+## Map Projection #2
+### This map is a projection using the NAD83 of Texas.
+
+```{r}
+
+TX_state_plane <-"+proj=lcc +lat_1=27.41666666666667 +lat_2=34.91666666666666 +lat_0=31.16666666666667 +lon_0=-100 +x_0=1000000 +y_0=1000000 +ellps=GRS80 +datum=NAD83 +units=m +no_defs"
+
+US_map <- ggplot(US_states) +
+  geom_sf() +
+  coord_sf(crs = TX_state_plane)+
+  theme_bw()
+
+US_map
+
+```
+
+## Map Projection #3
+### This map is a projection using the NAD83 of Massachusetts
+
+```{r}
+MA_state_plane <- "+proj=lcc +lat_1=42.68333333333333 +lat_2=41.71666666666667 +lat_0=41 +lon_0=-71.5 +x_0=200000.0001016002 +y_0=750000 +ellps=GRS80 +datum=NAD83 +to_meter=0.3048006096012192 +no_defs"
+
+US_map <- ggplot(US_states) +
+  geom_sf() +
+  coord_sf(crs = MA_state_plane)+
+  theme_bw()
+
+US_map
+
+```
+
+## Map Projection #4
+### For the purposes of the next few examples, I will use the projection of the US using the Albers Equal Area projection.
+
+```{r}
+
+USA_AEA <- "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=clrk66 +units=m +no_defs"
+
+US_transformed <- US_states %>%
+  st_transform(crs = USA_AEA)
+
+ggplot(US_transformed) +
+  geom_sf()+
+  theme_bw()
+
+```
+
+## Chloropleth Map
+### This map shows the total population of each state from the 2018 American Community Survey results. 
+
+
+```{r, results = 'hide', message = FALSE}
+
+census_data <- get_acs(geography = "state", variables = "B01003_001", year = 2018)
+
+
+US_data <- left_join(US_transformed, census_data, by = c("name" = "NAME"))
+
+ggplot(US_data, aes(fill = estimate/1000000)) +
+  geom_sf()+
+  scale_fill_viridis_c(name = "Total population (M)",
+                       breaks = seq(0,40, by = 5),
+                       labels = seq(0,40, by = 5))+
+  theme_map()
+
+```
+
+## Cartogram Map
+### This map shows the total population of each state and the distortion to its size depending on the population. 
+
+```{r, results = 'hide', message = FALSE}
+
+US_cartogram <- cartogram_cont(US_data, "estimate", itermax = 5)
+
+ggplot(US_cartogram, aes(fill = estimate/1000000))+
+  geom_sf(color = NA)+
+  scale_fill_viridis_c(name = "Total population (M)",
+                       breaks = seq(0,40, by = 5),
+                       labels = seq(0,40, by = 5))+
+  theme_map()
+
+
+```
+
+## Dorling Map
+### This map shows the size of the population of each state as its own bubble in the location of the state.
+
+
+```{r}
+US_dorling <- cartogram_dorling(US_data, "estimate")
+
+ggplot(US_dorling, aes(fill = estimate/1000000))+
+  geom_sf(color = NA)+
+  scale_fill_viridis_c(name = "Total population (M)",
+                       breaks = seq(0,40, by = 5),
+                       labels = seq(0,40, by = 5))+
+  theme_map()
+
+```
+
+## Centroid Map
+### This map shows the size of the population of each state in the center of the state's geographical location.
+
+
+```{r, results = FALSE, warning = FALSE}
+US_centroids <- st_centroid(US_data)
+
+ggplot(US_data) +
+  geom_sf(fill = NA, color = "gray")+
+  geom_sf(data = US_centroids, aes(size = estimate/1000000),
+          alpha = 0.5, color = "red") +
+  scale_size_continuous(name = "Total population (M)",
+                        range = c(1,20),
+                        breaks = seq(0,40, by = 5),
+                        labels = seq(0,40, by = 5)) +
+  theme_void()
+```
+
