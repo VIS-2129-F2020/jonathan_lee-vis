@@ -25,6 +25,7 @@ library(magrittr)
 library(tidycensus)
 library(cartogram)
 library(wesanderson)
+library(gridExtra)
 
 ```
 
@@ -148,10 +149,36 @@ ggplot(US_data, aes(fill = estimate/1000000)) +
   scale_fill_gradientn(name = "Total population (M)",
                        breaks = seq(0,40, by = 5),
                        labels = seq(0,40, by = 5),
-                       colors = wes_palette(name = "Zissou1", type = "continuous"))+
+                       colors = wes_palette(name = "Zissou1",n = 2, type = "continuous"))+
   theme_map()
 
 ```
+
+## Chloropleth Map Comparison
+### I wanted to see how the map would look if I added three colors to the gradient instead of two.
+
+```{r, results = 'hide', message = FALSE}
+
+plot_2 <- ggplot(US_data, aes(fill = estimate/1000000)) +
+  geom_sf()+
+  scale_fill_gradientn(
+                       colors = wes_palette(name = "Zissou1",n = 2, type = "continuous"),
+                       guide = FALSE)+
+  theme_map()
+
+plot_3 <- ggplot(US_data, aes(fill = estimate/1000000)) +
+  geom_sf()+
+  scale_fill_gradientn(name = "Total population (M)",
+                       breaks = seq(0,40, by = 5),
+                       labels = seq(0,40, by = 5),
+                       colors = wes_palette(name = "Zissou1",n = 3, type = "continuous"),
+                       guide = FALSE)+
+  theme_map()
+
+
+grid.arrange(plot_2, plot_3, nrow=1)
+```
+
 
 ## Cartogram Map
 ### This map shows the total population of each state and the distortion to its size depending on the population. 
@@ -165,7 +192,7 @@ ggplot(US_cartogram, aes(fill = estimate/1000000))+
   scale_fill_gradientn(name = "Total population (M)",
                        breaks = seq(0,40, by = 5),
                        labels = seq(0,40, by = 5),
-                       colors = wes_palette(name = "Zissou1", type = "continuous"))+
+                       colors = wes_palette(name = "Zissou1", n = 2, type = "continuous"))+
   theme_map()
 
 
@@ -183,7 +210,7 @@ ggplot(US_dorling, aes(fill = estimate/1000000))+
   scale_fill_gradientn(name = "Total population (M)",
                        breaks = seq(0,40, by = 5),
                        labels = seq(0,40, by = 5),
-                       colors = wes_palette(name = "Zissou1", type = "continuous"))+
+                       colors = wes_palette(name = "Zissou1", n = 2, type = "continuous"))+
   theme_map()
 
 ```
