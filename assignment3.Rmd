@@ -1,0 +1,341 @@
+---
+title: "Assignment3"
+author: "Jonathan Lee"
+date: "September 29th, 2020"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  html_document:
+    theme: readable
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+```{r, message=FALSE}
+library(sf)
+library(tidyverse)
+library(ggthemes)
+library(ggspatial)
+library(units)
+library(nngeo)
+library(readxl)
+library(gridExtra)
+```
+
+
+### Data reading and cleaning
+
+```{r, message=FALSE, cache=TRUE}
+nhoods <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/3525b0ee6e6b427f9aab5d0a1d0a1a28_0.kml?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D", quiet = TRUE)
+
+police_dist <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/9a3a8c427add450eaf45a470245680fc_5.kml?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D", quiet = TRUE)
+
+community_centers <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/acedd06b39854088b0f2fefccffebf84_0.kml?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D", quiet = TRUE)
+
+crime_raw <- st_read("https://data.boston.gov/dataset/6220d948-eae2-4e4b-8723-2dc8e67722a3/resource/12cb3883-56f5-47de-afa5-3b1cf61b257b/download/tmpoyezvlyu.csv", quiet = TRUE)
+
+nhoods_demo <- read_excel("data/nhoods_demographics.xlsx", sheet = "Age", skip = 2) %>%
+  drop_na() %>%
+  rename("Name" = "...1", "tot_pop" = "Total Population") %>%
+  select("Name", "tot_pop", "Median Age")
+
+crime_2020 <- crime_raw %>%
+  filter(YEAR == 2020) %>%
+  na_if("") %>%
+  drop_na(Lat | Long)
+
+crime_2020_sf <- st_as_sf(crime_2020, coords = c("Long", "Lat"), crs = 4326) %>%
+  select(OFFENSE_CODE, OFFENSE_DESCRIPTION, geometry)
+
+nhoods <- nhoods %>%
+  left_join(nhoods_demo, by = c("Name" = "Name") )
+
+
+```
+
+
+### Projecting the maps onto the MA plane.
+
+```{r}
+MA_state_plane <- "+proj=lcc +lat_1=41.71666666666667 +lat_2=42.68333333333333 +lat_0=41 +lon_0=-71.5 +x_0=200000 +y_0=750000 +ellps=GRS80 +units=m +no_defs"
+
+nhoods <- nhoods %>%
+  st_transform(MA_state_plane)
+
+community_centers <- community_centers %>%
+  st_transform(MA_state_plane)
+
+crime_2020_sf <- crime_2020_sf %>%
+  st_transform(MA_state_plane)
+
+police_dist <- police_dist %>%
+  st_transform(MA_state_plane)
+
+crime_2020_assault <- crime_2020_sf %>%
+  filter(OFFENSE_CODE == "801") # Simple assault
+
+crime_2020_auto <- crime_2020_sf %>%
+  filter(OFFENSE_CODE == "723" | OFFENSE_CODE == "724") # Attempted auto theft or auto theft
+
+```
+
+
+## Map 1
+
+This map shows the location of all auto thefts and assaults that occurred in 2020 so far.
+
+```{r}
+ggplot() +
+  geom_sf(data = nhoods, fill = "gray80", color = "white") +
+  geom_sf(data = crime_2020_auto, aes( color = "black"), alpha = 0.5, size =1) +
+  geom_sf(data = crime_2020_assault, alpha = 0.1, aes( color = "red"))+
+  theme_map()+
+  annotation_scale(bar_cols = c("gray80", 'white'), pad_x = unit(7, "cm"))+
+  scale_color_manual(values = c("black","red"), labels = c("Auto theft","Assault"),
+                     name = "Crime")
+```
+
+## Map 2
+
+These maps compare the difference of auto theft and assault by neighborhoods.
+
+```{r fig.height=10, fig.width=15, message=FALSE, results='hide'}
+
+nhoods <- nhoods %>%
+  mutate(num_auto = lengths(st_covers(nhoods, crime_2020_auto))) %>%
+  mutate(num_assault = lengths(st_covers(nhoods, crime_2020_assault)))
+
+
+plot_auto <- ggplot(nhoods)+
+  geom_sf(color = "white", aes(fill = num_auto))+
+  scale_fill_gradient(name = "Number of auto theft",
+                      low = "gray80", high = "#FB8C65")+
+  theme_map()+
+  theme(legend.position = c(0.6,0))
+
+plot_assault <- ggplot(nhoods)+
+  geom_sf(color = "white", aes(fill = num_assault))+
+  scale_fill_gradient(name = "Number of Assault",
+                      low = "gray80", high = "#B4281E")+
+  theme_map()+
+  theme(legend.position = c(0.6,0))
+
+grid.arrange(plot_auto, plot_assault, nrow = 1)
+
+
+```
+
+## Map 3
+
+These maps compare the difference in auto theft when counted by neighborhoods or by police districts.
+
+```{r, fig.width=15, fig.height=10}
+
+police_dist <- police_dist %>%
+  mutate(num_auto = lengths(st_covers(police_dist, crime_2020_auto))) %>%
+  mutate(num_assault = lengths(st_covers(police_dist, crime_2020_assault)))
+
+plot_nhoods <- ggplot(nhoods)+
+  geom_sf(color = "white", aes(fill = num_auto))+
+  scale_fill_gradient(name = "Number of auto theft\nby neighborhood",
+                      low = "gray80", high = "gray10",
+                      limits = c(0,300))+
+  theme_map()+
+  theme(legend.position = c(0.6,0))
+
+plot_police <- ggplot(police_dist)+
+  geom_sf(color = "white", aes(fill = num_auto))+
+  scale_fill_gradient(name = "Number of auto theft\nby police district",
+                      low = "gray80", high = "gray10",
+                      limits = c(0,300))+
+  theme_map()+
+  theme(legend.position = c(0.6,0))
+
+grid.arrange(plot_nhoods, plot_police, nrow = 1)
+
+
+```
+
+
+## Map 5
+
+These maps compare the difference between auto theft and assaults by police districts.
+
+```{r, fig.width=15, fig.height=10}
+
+
+plot_auto <- ggplot(police_dist)+
+  geom_sf(color = "white", aes(fill = num_auto))+
+  scale_fill_gradient(name = "Number of auto theft",
+                      low = "gray80", high = "#2D4441")+
+  theme_map()+
+  theme(legend.position = c(0.6,0))
+
+plot_assault <- ggplot(police_dist)+
+  geom_sf(color = "white", aes(fill = num_assault))+
+  scale_fill_gradient(name = "Number of Assault",
+                      low = "gray80", high = "#8CB3AF")+
+  theme_map()+
+  theme(legend.position = c(0.6,0))
+
+grid.arrange(plot_auto, plot_assault, nrow = 1)
+
+
+```
+
+
+## Map 6
+
+These maps compares the area density of auto thefts when calculated by neighborhoods or police districts.
+
+```{r, fig.width=15, fig.height=10}
+nhoods <- nhoods %>%
+  mutate (area = set_units(st_area(nhoods), km^2)) %>%
+  mutate (auto_area_dens = as.numeric(num_auto/area))
+
+police_dist <- police_dist %>%
+  mutate (area = set_units(st_area(police_dist), km^2)) %>%
+  mutate (auto_area_dens = as.numeric(num_auto/area))
+
+plot_auto <- ggplot(nhoods)+
+  geom_sf(color = "white", aes(fill = auto_area_dens))+
+  scale_fill_gradient(name = "Area density of auto theft\nby neighborhoods (/km^2)",
+                      low = "gray80", high = "gray10",
+                      limits = c(0,40))+
+  theme_map()+
+  theme(legend.position = c(0.6,0))
+
+plot_assault <- ggplot(police_dist)+
+  geom_sf(color = "white", aes(fill = auto_area_dens))+
+  scale_fill_gradient(name = "Area density of auto theft\nby police districts (/km^2)",
+                      low = "gray80", high = "gray10",
+                      breaks = seq(0,40, by=10),
+                      limits = c(0,40))+
+  theme_map()+
+  theme(legend.position = c(0.6,0))
+
+grid.arrange(plot_auto, plot_assault, nrow = 1)
+
+
+```
+
+## Map 7
+
+This map shows the population density of auto thefts by neighborhoods
+
+```{r}
+
+nhoods <- nhoods %>%
+  mutate(auto_pop_dens = as.numeric(num_auto/(tot_pop/1000))) %>%
+  mutate(assault_pop_dens = as.numeric(num_assault/(tot_pop/1000)))
+
+ggplot(nhoods)+
+  geom_sf( aes(fill = auto_pop_dens, color = ""))+
+  scale_fill_gradient(name = "Population density of auto theft\nby neighborhoods",
+                      low = "gray90", high = "#4C4C65", na.value = "white",
+                      breaks = breaks <- seq(0,3, by=1),
+                      labels = paste(breaks,"auto theft per 1000 people"))+
+  theme_map()+
+  theme(legend.position = c(0.6,0))+
+  scale_color_manual(values = NA, name = "No data")+
+  guides(color=guide_legend("No data", override.aes=c(fill="white", color = "black")))
+
+
+
+```
+
+## Map 8
+
+This map shows the population density of assaults by neighborhoods
+
+```{r}
+ggplot(nhoods)+
+  geom_sf(aes(fill = assault_pop_dens, color = ""))+
+  scale_fill_gradient(name = "Population density of assault\nby neighborhoods",
+                      low = "gray90", high = "#5AB6DB", na.value = "white",
+                      breaks = breaks <- seq(0,15, by=5),
+                      labels = paste(breaks,"assaults per 1000 people"))+
+  theme_map()+
+  theme(legend.position = c(0.6,0))+
+  scale_color_manual(values = NA, name = "No data")+
+  guides(color=guide_legend("No data", override.aes=c(fill="white", color = "black")))
+
+```
+
+
+## Map 9
+
+This map shows all the community centers around Boston and how far each of them are to the nearest assault.
+
+
+```{r, message = FALSE, results = 'hide'}
+community_centers <- community_centers %>%
+  mutate(assault_dist = st_nn(community_centers, crime_2020_assault, returnDist = TRUE)$dist) %>%
+  mutate(assault_dist = as.numeric(assault_dist))
+
+avg_assault_dist <- mean(community_centers$assault_dist)
+
+
+left_side <- st_bbox(nhoods)$xmin
+top_side <- st_bbox(nhoods)$ymax
+
+ggplot(nhoods) +
+  geom_sf(color = "white") +
+  geom_sf(data = community_centers, aes(color = assault_dist), size = 5)+
+  theme_map()+
+  annotate(geom = "text", x = left_side + 300, y = top_side - 550,
+           label = paste("On average, the nearest distance of an assault from\n",
+                         "a community center is", prettyNum(avg_assault_dist, digits = 3)),
+           hjust = 0, vjust = 0, size = 3)+
+  scale_color_gradient(name = "Distance of an assult\nfrom each community center",
+                       low = "white", high = "#2D4441")+
+  theme(legend.position = c(0.7,0))
+  
+```
+
+## Map 10
+This map shows the community centers and the assaults that occurred within 50m of community centers.
+
+```{r}
+
+community_centers_buffer <- st_buffer(community_centers, dist = 50) %>%
+  st_union()
+
+assault_community_center <- crime_2020_assault[community_centers_buffer,]
+
+crime_assault_cc <- crime_2020_assault %>%
+  st_join(assault_community_center)
+
+crime_assault_cc <- crime_assault_cc %>%
+  mutate(by_community_center = !is.na(crime_assault_cc$OFFENSE_CODE.y))
+
+n_assault_by_cc <- sum(crime_assault_cc$by_community_center)
+
+n_assault <- length(crime_assault_cc$by_community_center)
+
+pct_assault <- n_assault_by_cc/n_assault * 100
+
+
+ggplot(nhoods)+
+  geom_sf(color = "white")+
+  geom_sf(data = community_centers_buffer, aes(color = "black"), size = 5)+
+  geom_sf(data = assault_community_center,
+          aes(color = "red"), size = 5, alpha = 0.5)+
+  scale_color_manual(values = c("black", "red"),
+                     name = "Community centers and assaults within 50m",
+                     labels = c("Community centers", "Assaults"))+
+  annotate(geom = "text", x = left_side + 300, y = top_side - 550,
+           label = paste("Of the ", prettyNum(n_assault, big.mark = ","),
+                         " assaults in 2020\n",
+                         prettyNum(n_assault_by_cc),
+                         "(",
+                         prettyNum(pct_assault, digits = 1),
+                         "%) are within 50 meters of a community center."),
+           hjust = 0, vjust = 0, size = 3)+
+  theme_map()+
+  theme(legend.position = c(0.4,0))
+
+```
+
