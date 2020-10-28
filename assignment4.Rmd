@@ -38,6 +38,10 @@ neighborhood_boundaries <- st_read("http://bostonopendata-boston.opendata.arcgis
 northend_neighborhood <- neighborhood_boundaries[neighborhood_boundaries$Name %in% c("North End", "Downtown", "West End","Beacon Hill", "Chinatown", "Leather District"),] %>%
   st_transform(crs = MA_state_plane)
 
+northend <- neighborhood_boundaries[neighborhood_boundaries$Name == "North End",] %>%
+  st_transform(crs = MA_state_plane)
+
+
 subway_stops <- subway_stops %>%
   st_transform(crs = MA_state_plane)
 
@@ -66,7 +70,7 @@ plot1 <- ggplot(neighborhood_boundaries)+
   theme_map()+
   labs(title = "Boston")
 
-plot2 <- ggplot(northend_neighborhood)+
+plot2 <- ggplot(northend)+
   geom_sf() +
   geom_sf(data = northend_stops, aes(fill = "Metro Stops"))+
   guides(fill = "legend")+
@@ -132,6 +136,11 @@ northend_stops <- northend_stops %>%
 iso_10min_walk_northend <-
   otp_isochrone(otpcon = otpcon, fromPlace = northend_stops,
                 mode = "WALK", cutoffSec = 600) %>%
+  st_transform(crs = MA_state_plane)
+
+iso_15min_walk_northend <-
+  otp_isochrone(otpcon = otpcon, fromPlace = northend_stops,
+                mode = "WALK", cutoffSec = 900) %>%
   st_transform(crs = MA_state_plane)
 
 ```
@@ -292,3 +301,30 @@ ggplot(northend_neighborhood, aes(x = num_stops, y = iso_percent))+
 
 
 ```
+
+
+
+```{r}
+
+northend_stops <- northend_stops %>%
+  st_transform(crs = MA_state_plane)
+
+iso_northend_15_union <- st_intersection(northend, iso_15min_walk_northend) %>%
+  st_union
+
+iso_northend_10_union <- st_intersection(northend, iso_10min_walk_northend) %>%
+  st_union
+
+
+ggplot()+
+  annotation_map_tile(type = "cartolight", zoomin = 0, progress = "none") +
+  geom_sf(data = northend, alpha = 0.1) +
+  geom_sf(data = iso_northend_15_union, fill = "#225559", alpha = 0.5) +
+  geom_sf(data = iso_northend_10_union, alpha = 0.5) +
+  theme_map() +
+  labs(caption = "Basemap Copyright OpenStreetMap contributors")
+
+ggsave("walkshed.svg")
+
+```
+

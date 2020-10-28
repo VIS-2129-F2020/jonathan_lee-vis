@@ -55,13 +55,7 @@ new_apartments_sf <- st_as_sf(new_apartments, coords = c("long","lat"), crs = "+
 
 ```{r}
 
-# new_apartments_sf$describe <- paste(new_apartments_sf$num_units) %>%
-#   lapply(htmltools::HTML)
-# 
-# affordable_housing$Name %>% lapply(htmltools::HTML)
-
-
-map_1 <- leaflet() %>%
+map <- leaflet() %>%
   addProviderTiles(providers$Stamen.TonerLite) %>%
   addCircleMarkers(data = affordable_housing, group = "Affordable housing", color = "blue", stroke = FALSE, 
              popup = paste("Affordable Housing <br/>",
@@ -70,12 +64,17 @@ map_1 <- leaflet() %>%
                    popup =paste("Market Rate Apartments <br/>",
                      "Housing units: ", new_apartments_sf$num_units, "<br/>",
                      "Permit Issue Date: ", new_apartments_sf$`Issue Date`)) %>%
-  addControl("Market Rate and Affordable Housing<br/>in Los Angeles, CA", 
+  addControl("New Market Rate Apartments <br/>and Affordable Housing in<br/>Los Angeles, CA", 
              position= "topright") %>%
   addLayersControl(overlayGroups = c("Market rate apartments", "Affordable housing")) %>%
+  addControl('<a href="https://data.lacity.org/A-Livable-and-Sustainable-City/HCIDLA-Affordable-Housing-Projects-List-2003-to-Pr/mymu-zi3s">Data source (Affordable Housing)</a><br/>
+             <a href="https://data.lacity.org/A-Prosperous-City/New-Apartments/gnbc-bvkw">Data source (Market Rate Apartments)</a>',
+             position = "bottomleft") %>%
   setView(-118.245, 34.0432, zoom = 14)
 
-map_1
+map
+
+saveWidget(map, file="Map_Jonathan_Lee.html")
 
 ```
 
