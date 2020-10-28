@@ -1,0 +1,81 @@
+---
+title: "Assignment6"
+author: "Jonathan Lee"
+date: "October 28, 2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+### Data Loading and Cleanup
+
+```{r, message=FALSE, results='hide'}
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(htmltools)
+library(htmlwidgets)
+library(ggplot2)
+library(ggthemes)
+```
+
+```{r, message=FALSE, results='hide', warning=FALSE}
+
+parcels <- st_read(file.path("data","parcels_downtown","parcels_downtown.shp")) %>%
+  st_transform("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs ")
+
+affordable_housing <- st_read("https://data.lacity.org/api/geospatial/mymu-zi3s?method=export&format=KML") %>%
+  st_transform("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+
+new_units <- st_read(file.path("C:","users","yedah","Desktop","Fall 2020","Land use", "data","New_Housing_Units_Permitted.csv"))
+
+new_apts <- read_csv(file.path("C:","users","yedah","Desktop","Fall 2020","Land use", "data","New_Apartments.csv"), na = "") %>%
+  drop_na(`Latitude/Longitude`) %>%
+  mutate(latlong = `Latitude/Longitude`) %>%
+  separate(latlong, into = c("lat", "long"), sep = ", ")
+
+new_apts$lat <- as.numeric(substring(new_apts$lat, 2))
+new_apts$long <- as.numeric(substring(new_apts$long,1 ,nchar(new_apts$long)-1))
+
+new_apts_sf <- st_as_sf(new_apts, coords = c("long","lat"), crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+
+new_apartments <- read_csv(file.path("C:","users","yedah","Desktop","Fall 2020","Land use", "data","New_Apartments.csv"), na = "") %>%
+  drop_na(`Latitude/Longitude`) %>%
+  mutate(latlong = `Latitude/Longitude`, num_units = `# of Residential Dwelling Units`) %>%
+  separate(latlong, into = c("lat", "long"), sep = ", ")
+
+new_apartments$lat <- as.numeric(substring(new_apartments$lat, 2))
+new_apartments$long <- as.numeric(substring(new_apartments$long,1 ,nchar(new_apartments$long)-1))
+
+new_apartments_sf <- st_as_sf(new_apartments, coords = c("long","lat"), crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+
+```
+
+### The Map
+
+```{r}
+
+# new_apartments_sf$describe <- paste(new_apartments_sf$num_units) %>%
+#   lapply(htmltools::HTML)
+# 
+# affordable_housing$Name %>% lapply(htmltools::HTML)
+
+
+map_1 <- leaflet() %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addCircleMarkers(data = affordable_housing, group = "Affordable housing", color = "blue", stroke = FALSE, 
+             popup = paste("Affordable Housing <br/>",
+               "Name: ", str_to_title(affordable_housing$Name))) %>%
+  addCircleMarkers(data = new_apartments_sf, group = "Market rate apartments", color = "red", stroke = FALSE,
+                   popup =paste("Market Rate Apartments <br/>",
+                     "Housing units: ", new_apartments_sf$num_units, "<br/>",
+                     "Permit Issue Date: ", new_apartments_sf$`Issue Date`)) %>%
+  addControl("Market Rate and Affordable Housing<br/>in Los Angeles, CA", 
+             position= "topright") %>%
+  addLayersControl(overlayGroups = c("Market rate apartments", "Affordable housing")) %>%
+  setView(-118.245, 34.0432, zoom = 14)
+
+map_1
+
+```
+

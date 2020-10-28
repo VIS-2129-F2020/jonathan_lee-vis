@@ -1,0 +1,82 @@
+---
+title: "Assignment5"
+author: "Jonathan Lee"
+date: "October 21, 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(raster)
+library(tidyverse)
+library(RStoolbox)
+library(ggthemes)
+library(ggspatial)
+library(osmdata)
+library(sf)
+```
+
+## Introduction
+For this exercise I wanted to see how the concept of "my neighborhood" changes depending on the mode of transportation that I use. Back when I was living in LA, the spaces I would frequently go to were divided into whether I needed to drive there or if I could walk there. Therefore I drew two maps each showing the places I frequented in different modes of transportation. 
+
+
+The data that I will be using for Los Angeles. Sourced from the LA Open Data portal.
+
+```{r, message=FALSE, results='hide'}
+roads <- st_read(file.path("tl_2019_06037_roads","tl_2019_06037_roads.shp"))
+parcels <- st_read(file.path("la_parcels","LA_City_Parcels selection.shp"))
+
+```
+
+## Image 1
+
+For this image, I drew the neighborhood I used to live in Los Angeles and the places I would frequently go to that were about 10-15 min walk from my home. This image was georeferenced in ArcGIS Pro and imported into R.
+
+```{r}
+
+map_image_1 <- stack("georeferencing_map_1.tif")
+
+ggRGB(map_image_1, r = 1, g = 2, b = 3)
+```
+
+I overlayed parcel data onto my hand-drawn map.
+
+
+```{r}
+ggplot(parcels) +
+  ggRGB(map_image_1, 
+        r = 1, g = 2, b = 3, ggLayer = TRUE) +
+  geom_sf(alpha = 0.1, color = "gray60") +
+  coord_sf(xlim = c(map_image_1@extent@xmin, map_image_1@extent@xmax),
+           ylim = c(map_image_1@extent@ymin, map_image_1@extent@ymax)) +
+  theme_map() +
+  annotation_scale() +
+  annotation_north_arrow(location = "tr")
+```
+
+## Image 2
+
+For this image, I drew the places I would go in about a 10-15 min car drive in Los Angeles. This image was georeferenced in ArcGIS Pro and imported into R.
+
+
+```{r}
+map_image_2 <- stack(file.path("C:","Users","yedah","Desktop","Fall 2020","VIS","georeferencing_map_2.tif"))
+
+ggRGB(map_image_2, r = 1, g = 2, b = 3)
+```
+
+Then, I overlayed the roads data onto my hand-drawn map.
+
+
+```{r}
+ggplot(roads) +
+  ggRGB(map_image_2, 
+        r = 1, g = 2, b = 3, ggLayer = TRUE) +
+  geom_sf(alpha = 0.5, color = "gray50") +
+  coord_sf(xlim = c(map_image_2@extent@xmin, map_image_2@extent@xmax),
+           ylim = c(map_image_2@extent@ymin, map_image_2@extent@ymax)) +
+  theme_map() +
+  annotation_scale() +
+  annotation_north_arrow(location = "tr")
+```
