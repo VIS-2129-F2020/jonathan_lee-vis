@@ -1,0 +1,319 @@
+---
+title: "Assignment 7"
+author: "Jonathan Lee"
+date: "November 3, 2020"
+output:
+  html_document:
+    theme: readable
+    toc: yes
+    toc_float: yes
+  pdf_document: default
+---
+
+## Vacant Retail Storefronts in Cambridge, MA
+
+```{r, message=FALSE, results='hide', warning=FALSE, include=FALSE, echo=FALSE}
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(htmltools)
+library(htmlwidgets)
+library(ggplot2)
+library(ggthemes)
+library(raster)
+library(gstat)
+library(spatial)
+```
+
+
+
+I wanted to visualize the vacant retail storefronts in Cambridge. To interpolate the data, I chose to look at the city-designated Commercial Districts and the percentage of vacant retail stores (Oct. 2020) among all commercial-use units in that district (Aug. 2020). I had to get all the variables from different sources and from different time periods so there may be some unforeseen error in the data. 
+
+
+```{r, message=FALSE, results='hide', warning=FALSE, include=FALSE}
+
+MA_state_plane <- "+proj=lcc +lat_1=41.71666666666667 +lat_2=42.68333333333333 +lat_0=41 +lon_0=-71.5 +x_0=200000 +y_0=750000 +ellps=GRS80 +units=m +no_defs"
+WGS84 <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+
+
+closed <- st_read(file.path("C:","users","yedah","Desktop","Fall 2020","VIS", "Retail Vacant Storefronts October 2020.geojson")) %>%
+  st_transform(crs=MA_state_plane) %>%
+  distinct(geometry, .keep_all = TRUE)
+
+closed_covid <- closed %>%
+  filter(length_of_vacancy == "6-10 months")
+
+landuse <- st_read(file.path("C:","users","yedah","Desktop","Fall 2020","VIS", "Land Use Data 2020.geojson")) %>%
+  st_transform(crs=MA_state_plane)
+
+landuse_comm <- landuse %>%
+  filter(land_use_description == "RETAIL-STORE" | land_use_description == "EATING-ESTBL" |
+           land_use_description == "RETAIL-CONDO" | land_use_description == "SH-CNTR/MALL" |
+           land_use_description == "MULTIUSE-COM" | land_use_description == "MULTIUSE-RES" |
+           land_use_category == "Residential Ground Floor Comm"| mixed_use == "groundfloor" |
+           mixed_use == "mixed") %>%
+  distinct(geometry, .keep_all = TRUE)
+
+
+nhoods <- st_read(file.path("C:","users","yedah","Desktop","Fall 2020","VIS","Cambridge Neighborhood Polygons.geojson")) %>%
+  st_transform(crs=MA_state_plane)
+
+comm_dist <- st_read(file.path("C:","users","yedah","Desktop","Fall 2020","VIS","cambridge_commercial_districts", "Commercial Districts.shp")) %>%
+  st_transform(crs = MA_state_plane)
+
+
+
+closed_dist <- closed[comm_dist,]
+commercial_parcels <- landuse_comm[comm_dist,]
+
+
+comm_dist <- comm_dist %>%
+  mutate(num_closed = lengths(st_covers(comm_dist, closed_dist))) %>%
+  mutate(num_total = lengths(st_covers(comm_dist, commercial_parcels))) %>%
+  mutate(pct_closed = as.numeric(formatC(num_closed/num_total*100, digits=1, format = "f")))
+
+```
+
+
+
+
+```{r, message=FALSE, echo=FALSE}
+leaflet() %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(data = st_transform(nhoods, crs=WGS84), stroke=FALSE, fillColor = 'gray') %>%
+  addPolygons(data = st_transform(comm_dist, crs=WGS84), stroke=TRUE,
+              color="black", fillColor="white", fillOpacity = 0.5, opacity = 0.5,
+              label = ~DistName,
+              popup = paste("Commercial District: ",comm_dist$DistName, "<br/>",
+                            "Percent of retail shops closed: ", comm_dist$pct_closed,
+                            "%"),
+              highlightOptions = highlightOptions(opacity = 1)) %>%
+  addCircleMarkers(data = st_transform(landuse_comm, crs=WGS84), stroke=FALSE,
+                   color="#43AA8B", fillOpacity=0.8 ) %>%
+  addCircleMarkers(data = st_transform(closed, crs=WGS84), stroke=FALSE,
+                   color = '#F9C74F', fillOpacity=0.8) %>%
+  addLegend(colors = c("#43AA8B","#F9C74F" ),
+            labels= c("Commercial Parcels", "Vacant Storefront"))
+
+
+```
+
+## Chloropleth Map
+
+This is a chloropleth map showing the percentages of retail shops that are vacant. This is probably the most best visualization for this data as it is the most informative and appropriate. The previous map that only shows the actual locations can be a bit misleading since a high density of vacant stores can simply just reflect a high density of commercial units. The chloropleth map instead considers the zones of commercial areas (designated by the city of Cambridge) and the different percentages of the stores in each zones that are vacant. However, some data points are outside of the zones and thus are not accounted for in the chloropleth map. It is also worth noting that Kendall Square seems to have a very high percentage point, which could be due to errors in the data. As a result, I also looked at versions of each subsequent maps with and without the Kendall Square outlier.
+
+
+```{r, message=FALSE,  warning=FALSE, include=TRUE, echo=FALSE}
+
+bins <- seq(0, 100, by = 10)
+
+pal <- colorNumeric(palette=c("#c9df8a", "#234d20"), domain = c(0,100),
+                    na.color = "#00000000")
+
+
+
+
+leaflet() %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(data = st_transform(nhoods, crs=WGS84), stroke = FALSE,
+              fillColor = "#cccccc", fillOpacity = 0.6) %>%
+  addPolygons(data = st_transform(comm_dist, crs=WGS84),
+              label = ~DistName,
+              popup = paste("Commercial District: ",comm_dist$DistName, "<br/>",
+                            "Percent of retail shops closed: ", comm_dist$pct_closed,
+                            "%"),
+              highlightOptions = highlightOptions(fillOpacity = 1,
+                                                  fillColor = "green", weight = 2,
+                                                  bringToFront = TRUE),
+              fillColor = ~pal(pct_closed),
+              stroke=FALSE, fillOpacity = 0.7, weight = 0)
+
+
+```
+
+### Chloropleth Map (excluding outlier)
+
+
+```{r, message=FALSE,  warning=FALSE, include=TRUE, echo=FALSE}
+test_comm_dist <- comm_dist %>%
+  filter(DistName!="Kendall Square")
+
+bins <- seq(min(test_comm_dist$pct_closed),
+            max(test_comm_dist$pct_closed), by = 10)
+
+test_pal <- colorNumeric(palette=c("#c9df8a", "#234d20"), domain = c(min(test_comm_dist$pct_closed),
+            max(test_comm_dist$pct_closed)),
+                    na.color = "#00000000")
+
+
+leaflet() %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(data = st_transform(nhoods, crs=WGS84), stroke = FALSE,
+              fillColor = "#cccccc", fillOpacity = 0.6) %>%
+  addPolygons(data = st_transform(test_comm_dist, crs=WGS84),
+              label = ~DistName,
+              popup = paste("Commercial District: ",test_comm_dist$DistName, "<br/>",
+                            "Percent of retail shops closed: ", test_comm_dist$pct_closed,
+                            "%"),
+              highlightOptions = highlightOptions(fillOpacity = 1,
+                                                  fillColor = "green", weight = 2,
+                                                  bringToFront = TRUE),
+              fillColor = ~test_pal(pct_closed),
+              stroke=FALSE, fillOpacity = 0.8, weight = 0)
+
+
+
+```
+
+## Centroid Map
+
+The centroid map was interesting, because it shows the different commercial areas in a much simpler and clearer way, instead of the weirdly shaped polygons from above. This map could be fairly informative since it might be helpful to think of commercial activities as being spatially clustered around these centroids.
+
+```{r, message=FALSE,  warning=FALSE, include=TRUE, echo=FALSE}
+
+comm_dist_points <- st_centroid(st_transform(test_comm_dist, crs=MA_state_plane))
+
+leaflet() %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(data = st_transform(nhoods, crs=WGS84), stroke = FALSE,
+              fillColor = "#cccccc", fillOpacity = 0.6) %>%
+  addCircleMarkers(data = st_transform(comm_dist_points, crs=WGS84),
+              label = ~DistName,
+              popup = paste("Commercial District: ",comm_dist$DistName, "<br/>",
+                            "Percent of retail shops closed: ", comm_dist$pct_closed,"%"),
+              fillColor = ~pal(pct_closed),
+              stroke=FALSE, fillOpacity = 1)
+
+
+
+```
+
+### Centroid Map (excluding outlier)
+
+
+```{r, message=FALSE,  warning=FALSE, include=TRUE, echo=FALSE}
+
+test_comm_dist_points <- st_centroid(st_transform(test_comm_dist, crs=MA_state_plane))
+
+leaflet() %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(data = st_transform(nhoods, crs=WGS84), stroke = FALSE,
+              fillColor = "#cccccc", fillOpacity = 0.6) %>%
+  addCircleMarkers(data = st_transform(test_comm_dist_points, crs=WGS84),
+              label = ~DistName,
+              popup = paste("Commercial District: ",test_comm_dist$DistName, "<br/>",
+                            "Percent of retail shops closed: ", test_comm_dist$pct_closed,"%"),
+              fillColor = ~test_pal(pct_closed),
+              stroke=FALSE, fillOpacity = 1)
+
+
+
+```
+
+## Raster Interpolation - Commercial Districts
+
+The raster interpolation of the commercial districts isn't particularly useful or interesting because the polygons are not continuously placed.
+
+
+```{r, message=FALSE,  warning=FALSE, include=TRUE, echo=FALSE}
+
+comm_dist_points_sp <- comm_dist_points %>%
+  st_transform(MA_state_plane) %>%
+  as_Spatial()
+
+comm_dist_sp <- comm_dist %>%
+  st_transform(MA_state_plane) %>%
+  as_Spatial()
+
+cambridge_raster <- raster(comm_dist_sp, res=5)
+
+gs <- gstat(formula=pct_closed~1, locations=comm_dist_points_sp)
+idw_interp <- interpolate(cambridge_raster, gs)
+
+idw_interp_clip <- mask(idw_interp, comm_dist_sp)
+
+leaflet(comm_dist_points_sp) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addRasterImage(idw_interp_clip, colors = pal, opacity = 0.8)
+
+
+```
+
+### Raster Interpolation - Commercial District (excluding outlier)
+
+```{r, message=FALSE,  warning=FALSE, include=TRUE, echo=FALSE}
+
+test_comm_dist_points_sp <- test_comm_dist_points %>%
+  st_transform(MA_state_plane) %>%
+  as_Spatial()
+
+test_comm_dist_sp <- test_comm_dist %>%
+  st_transform(MA_state_plane) %>%
+  as_Spatial()
+
+cambridge_raster <- raster(comm_dist_sp, res=5)
+
+gs <- gstat(formula=pct_closed~1, locations=test_comm_dist_points_sp)
+idw_interp <- interpolate(cambridge_raster, gs)
+
+idw_interp_clip <- mask(idw_interp, test_comm_dist_sp)
+
+leaflet(test_comm_dist_points_sp) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addRasterImage(idw_interp_clip, colors = test_pal, opacity = 0.8)
+
+
+```
+
+
+
+## Raster Interpolation - City of Cambridge
+
+This raster interpolation of the city as a whole is misleading because commercial activity is not evenly spread out throughout the area, but are instead clustered in commercial use zones.
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+comm_dist_points_sp <- comm_dist_points %>%
+  st_transform(MA_state_plane) %>%
+  as_Spatial()
+
+nhoods_sp <- nhoods %>%
+  st_transform(MA_state_plane) %>%
+  as_Spatial()
+
+cambridge_raster <- raster(nhoods_sp, res=5)
+
+gs <- gstat(formula=pct_closed~1, locations=comm_dist_points_sp)
+idw_interp <- interpolate(cambridge_raster, gs)
+
+idw_interp_clip <- mask(idw_interp, nhoods_sp)
+
+leaflet(comm_dist_points_sp) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addRasterImage(idw_interp_clip, colors = pal, opacity = 0.8)
+
+```
+
+### Raster Interpolation - City of Cambridge (excluding outlier)
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+test_comm_dist_points_sp <- test_comm_dist_points %>%
+  st_transform(MA_state_plane) %>%
+  as_Spatial()
+
+nhoods_sp <- nhoods %>%
+  st_transform(MA_state_plane) %>%
+  as_Spatial()
+
+cambridge_raster <- raster(nhoods_sp, res=5)
+
+gs <- gstat(formula=pct_closed~1, locations=test_comm_dist_points_sp)
+idw_interp <- interpolate(cambridge_raster, gs)
+
+idw_interp_clip <- mask(idw_interp, nhoods_sp)
+
+leaflet(test_comm_dist_points_sp) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addRasterImage(idw_interp_clip, colors = test_pal, opacity = 0.8)
+
+```
+
